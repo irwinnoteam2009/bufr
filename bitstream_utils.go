@@ -29,3 +29,11 @@ func readByte(bs *bitstream.Reader) (int, error) {
 	}
 	return int(b), nil
 }
+
+func readBitBool(bs *bitstream.Reader) (bool, error) {
+	b, err := bs.ReadBit()
+	if err != nil {
+		return false, err
+	}
+	return b != 0, err
+}

@@ -14,26 +14,28 @@ type decoder interface {
 // Section0 is an indicator section
 type Section0 struct {
 	MagicString [4]byte // octets 1-4. Value "BUFR"
-	Len         int     // octets 5-7
-	Version     byte    // octet 8
+	Len         int     // octets 5-7. Total length of BUFR message, including Section 0
+	Version     byte    // octet 8. BUFR edition number (currently 3)
 }
 
 // Section1 is an identification section
 type Section1 struct {
-	Len                   int  // octets 1-3
-	MasterTable           byte // octet 4
-	Center                int  // octet 5-6. Code table 0 01 033
-	UpdateSequenceNumber  byte // octet 7
+	Len                   int  // octets 1-3. Length of section in octets
+	MasterTable           byte // octet 4. BUFR master table
+	SubCentre             byte // octet 5. Originating/generating sub-centre (defined by Originating/generating centre)
+	Centre                byte // octet 6. Originating/generating centre (Common Code tableC-1)
+	UpdateSequenceNumber  byte // octet 7. zero for original BUFR messages; incremented for updates
 	OptionalSectionExists bool // octet 8, bit 1. Bits 2->8 = 0
-	DataCategory          byte // octet 9
-	DataSubCategory       byte // octet 10
+	DataCategory          byte // octet 9. BUFR Table A
+	DataSubCategory       byte // octet 10. defined by local ADP centres
 	MasterTableVersion    byte // octet 11
 	LocalTableVersion     byte // octet 12
-	Year                  int  // octet 13
+	Year                  int  // octet 13. Year of century
 	Month                 byte // octet 14
 	Day                   byte // octet 15
 	Hours                 byte // octet 16
 	Minutes               byte // octet 17
+	Reserved              byte // octet 18. Reserved for local use by ADP centres
 }
 
 // Section2 is an optional section
@@ -45,12 +47,12 @@ type Section2 struct {
 
 // Section3 is a data description section
 type Section3 struct {
-	Len            int    // octets 1-3
-	Reserved       byte   // octet 4
-	SubsetCount    int    // octets 5-6
-	ObservedData   bool   // octet 7, bit 1
-	CompressedData bool   // octet 7, bit 2. Bits 3-8 = 0
-	Collection     []byte // octet 8+
+	Len            int           // octets 1-3
+	Reserved       byte          // octet 4
+	SubsetCount    int           // octets 5-6
+	ObservedData   bool          // octet 7, bit 1
+	CompressedData bool          // octet 7, bit 2. Bits 3->8 = 0
+	Descriptors    []*Descriptor // octet 8+
 }
 
 // Section4 is a data section
@@ -113,10 +115,8 @@ func (s *Section0) Decode(r io.Reader) error {
 	if s.Len, err = readByte3(reader); err != nil {
 		return err
 	}
-	if s.Version, err = reader.ReadByte(); err != nil {
-		return err
-	}
-	return nil
+	s.Version, err = reader.ReadByte()
+	return err
 }
 
 // Decode ...
@@ -129,18 +129,21 @@ func (s *Section1) Decode(r io.Reader) error {
 	if s.MasterTable, err = reader.ReadByte(); err != nil { // 4
 		return err
 	}
-	if s.Center, err = readByte2(reader); err != nil { // 5-6
+	if s.Centre, err = reader.ReadByte(); err != nil { // 5
+		return err
+	}
+	if s.Centre, err = reader.ReadByte(); err != nil { // 6
 		return err
 	}
 	if s.UpdateSequenceNumber, err = reader.ReadByte(); err != nil { // 7
 		return err
 	}
-	// 8
-	b, err := reader.ReadByte()
-	if err != nil {
+	if s.OptionalSectionExists, err = readBitBool(reader); err != nil { // 8, bit 1
 		return err
 	}
-	s.OptionalSectionExists = (b & 0x80) != 0
+	if _, err := reader.ReadBits(7); err != nil { // 8 other bits
+		return err
+	}
 	if s.DataCategory, err = reader.ReadByte(); err != nil { // 9
 		return err
 	}
@@ -169,8 +172,9 @@ func (s *Section1) Decode(r io.Reader) error {
 	if s.Minutes, err = reader.ReadByte(); err != nil { // 17
 		return err
 	}
-
-	return nil
+	// 18
+	s.Reserved, err = reader.ReadByte()
+	return err
 }
 
 // Decode ...
@@ -180,5 +184,26 @@ func (s *Section2) Decode(r io.Reader) error {
 
 // Decode ...
 func (s *Section3) Decode(r io.Reader) error {
-
+	reader := bitstream.NewReader(r)
+	var err error
+	if s.Len, err = readByte3(reader); err != nil { // 1-3
+		return err
+	}
+	if s.Reserved, err = reader.ReadByte(); err != nil { // 4
+		return err
+	}
+	if s.SubsetCount, err = readByte2(reader); err != nil { // 5-6
+		return err
+	}
+	if s.ObservedData, err = readBitBool(reader); err != nil { // 7, bit 1
+		return err
+	}
+	if s.CompressedData, err = readBitBool(reader); err != nil { // 7, bit 2
+		return err
+	}
+	if _, err := reader.ReadBits(6); err != nil { // 7, other bits
+		return err
+	}
+	// 8
+	return nil
 }

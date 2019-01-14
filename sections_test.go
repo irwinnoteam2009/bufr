@@ -35,5 +35,15 @@ func TestSection1(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("Section1: %+v\n", sect)
+}
+
+func TestSection3(t *testing.T) {
+	TestSection1(t)
+
+	sect, err := NewSection3(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("Section3: %+v\n", sect)
 	t.Fatal("OK")
 }
