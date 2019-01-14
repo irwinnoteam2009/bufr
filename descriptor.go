@@ -1,6 +1,7 @@
 package bufr
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/irwinnoteam2009/bitstream"
@@ -16,6 +17,15 @@ type Descriptor struct {
 	F byte // 2 bits
 	X byte // 6 bits
 	Y byte // 8 bits
+}
+
+// NewDescriptor ...
+func NewDescriptor(r io.Reader) (*Descriptor, error) {
+	d := new(Descriptor)
+	if err := d.Decode(r); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // Decode ...
@@ -36,4 +46,9 @@ func (d *Descriptor) Decode(r io.Reader) error {
 	// 9-16
 	d.Y, err = reader.ReadByte()
 	return err
+}
+
+// String ...
+func (d *Descriptor) String() string {
+	return fmt.Sprintf("%d%.2d%.3d", d.F, d.X, d.Y)
 }

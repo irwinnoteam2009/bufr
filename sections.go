@@ -204,6 +204,27 @@ func (s *Section3) Decode(r io.Reader) error {
 	if _, err := reader.ReadBits(6); err != nil { // 7, other bits
 		return err
 	}
-	// 8
+	// 8+
+	offset := 8 // from 8 octet
+	for offset < s.Len {
+		descriptor, err := NewDescriptor(r)
+		if err != nil {
+			return err
+		}
+		s.Descriptors = append(s.Descriptors, descriptor)
+		offset += 2
+	}
+	return nil
+}
+
+// Decode ...
+func (s *Section5) Decode(r io.Reader) error {
+	reader := bitstream.NewReader(r)
+	var err error
+	for i := 0; i < 4; i++ {
+		if s.END[i], err = reader.ReadByte(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
