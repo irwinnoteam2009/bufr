@@ -55,26 +55,26 @@ func getTagValues(tag string) map[string]string {
 }
 
 func processStruct(t *ast.TypeSpec, s *ast.StructType) error {
-	fmt.Println(t.Doc.Text(), t.Comment.Text())
-	if comment := t.Doc; comment != nil {
-		fmt.Println(comment.Text())
-	}
+	fmt.Println("doc:", t.Doc.Text(), "comments:", t.Comment.Text())
 	fmt.Println(t.Name.Name)
 
 	for _, f := range s.Fields.List {
-		// fmt.Printf("%v ", f)
+		var vtag string
 		if f.Tag != nil {
 			tag := reflect.StructTag(f.Tag.Value[1 : len(f.Tag.Value)-1])
-			v := tag.Get("bufr")
-			processField(f, v)
+			vtag = tag.Get("bufr")
 		}
+		processField(f, vtag)
 		// fmt.Println()
 	}
 
 	return nil
 }
 
-type test struct {
+const maxCount = 111
+
+// Test is lol
+type Test struct {
 	Magic   [4]byte `bufr:"bytes:4"`       // read 4 bytes
 	IsBool  bool    `bufr:"bits:1,skip:7"` // read 1 bit as bool
 	IsBool2 bool    `bufr:"bytes:1"`       // read byte as bool
@@ -82,10 +82,17 @@ type test struct {
 	IsInt2  int     // read 4 bytes
 	Skip    bool    `bufr:"-"` // skip
 	IsByte  byte    // read 1 byte
-
+	IsFloat float64 `bufr:"code:005002"`
+	IsArr   []int
+	IsArr2  [7]bool
+	IsArr3  [maxCount]int
+	Map     map[string]int
+	Pointer *int
 }
 
 func processField(field *ast.Field, tag string) {
+	fmt.Printf("%s %T\n", field.Names[0].Name, field.Type)
+
 	if tag == "-" {
 		return
 	}
@@ -94,6 +101,32 @@ func processField(field *ast.Field, tag string) {
 		Name: field.Names[0].Name,
 	}
 
+	// by type
+	switch t := field.Type.(type) {
+	case *ast.ArrayType:
+		if t.Len != nil {
+			switch l := t.Len.(type) {
+			case *ast.BasicLit:
+				fmt.Println(l.Value)
+			case *ast.Ident:
+				fmt.Println(l.Name)
+			}
+		}
+		// fmt.Printf("%T\n", l)
+	case *ast.MapType:
+	case *ast.StarExpr:
+		// pointers
+		// fallthrough
+	case *ast.Ident:
+		// simple types
+	}
+
+	// TODO: добавить Op и Wants в зависимости от типа
+	if info.Op == "" {
+
+	}
+
+	// override info
 	for k, v := range values {
 		switch k {
 		case "bits", "bytes":
@@ -112,12 +145,6 @@ func processField(field *ast.Field, tag string) {
 		case "type":
 
 		}
-	}
-	// TODO: добавить обработку по типу
-
-	// TODO: добавить Op и Wants в зависимости от типа
-	if info.Op == "" {
-
 	}
 
 	fmt.Printf("%+v\n", info)
