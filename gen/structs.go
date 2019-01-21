@@ -3,17 +3,17 @@ package main
 import (
 	"fmt"
 	"go/ast"
-	"html/template"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"text/template"
 )
 
 var (
 	tpl = template.Must(template.New("field").Parse(`
 	{{if .Type eq "bool"}}
-	if v, err := reader.Read{{if .Op eq "bits"}}Bit{{else if .Op eq "bytes"}}Byte{{end}}(); err != nil {
+	if v, err := reader.Read{{if .Op eq "bits"}}Bit{{else}}Byte{{end}}(); err != nil {
 		return err
 	}
 	t.{{.Name}} = v != 0
@@ -29,13 +29,24 @@ var (
 	}
 	{{end}}
 	`))
+
+	tplArr = template.Must(template.New("array").Parse(`
+	// read {{.Name}}
+	for i := 0; i < {{.Wants}}; i++ {
+		v, err := reader.Read {{ if .Op eq "bits" }}Bit{{else}}Byte{{end}}()
+		if err != nil {
+			return err
+		}
+		t.{{.Name}}[i] = v
+	}
+	`))
 )
 
 type fieldInfo struct {
 	Name  string
 	Type  string
 	Op    string
-	Wants int
+	Wants string
 	Skip  int
 }
 
@@ -99,39 +110,39 @@ func processField(field *ast.Field, tag string) {
 	values := getTagValues(tag)
 	info := fieldInfo{
 		Name: field.Names[0].Name,
+		Op:   "bytes",
 	}
 
 	// by type
+	var typLen string
 	switch t := field.Type.(type) {
 	case *ast.ArrayType:
 		if t.Len != nil {
 			switch l := t.Len.(type) {
 			case *ast.BasicLit:
-				fmt.Println(l.Value)
+				typLen = l.Value
 			case *ast.Ident:
-				fmt.Println(l.Name)
+				typLen = l.Name
 			}
 		}
 		// fmt.Printf("%T\n", l)
-	case *ast.MapType:
-	case *ast.StarExpr:
+	case *ast.MapType, *ast.StarExpr:
 		// pointers
-		// fallthrough
+		fmt.Println("SKIP UNUSED")
+		return
 	case *ast.Ident:
 		// simple types
+		typLen = getSizeByType(t.Name)
+		fmt.Println("simple type: ", t.Name)
 	}
-
-	// TODO: добавить Op и Wants в зависимости от типа
-	if info.Op == "" {
-
-	}
+	info.Wants = typLen
 
 	// override info
 	for k, v := range values {
 		switch k {
 		case "bits", "bytes":
 			info.Op = k
-			v, err := strconv.Atoi(v)
+			_, err := strconv.Atoi(v)
 			if err != nil {
 				panic(err)
 			}
@@ -148,5 +159,24 @@ func processField(field *ast.Field, tag string) {
 	}
 
 	fmt.Printf("%+v\n", info)
-	tpl.Execute(os.Stdout, info)
+	tplArr.Execute(os.Stdout, info)
+}
+
+func getSizeByType(typ string) string {
+	size := map[string]string{
+		"bool":    "1",
+		"byte":    "1",
+		"int8":    "1",
+		"int16":   "2",
+		"int32":   "4",
+		"int64":   "8", // 4
+		"uint8":   "1",
+		"uint16":  "2",
+		"uint32":  "4",
+		"uint64":  "8", // 4
+		"int":     "4",
+		"float32": "4",
+		"float64": "8", // 4
+	}
+	return size[typ]
 }
